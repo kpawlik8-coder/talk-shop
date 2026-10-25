@@ -18,13 +18,13 @@ W terminalu, w katalogu projektu:
 
 ```sh
 uv sync --all-groups
-uv run talk-shop -g grammar.txt
+uv run talk-shop -g src/talk_shop/static/grammar.txt
 ```
 
 Alternatywnie:
 
 ```sh
-uv run talk-shop --grammar grammar.txt
+uv run talk-shop --grammar src/talk_shop/static/grammar.txt
 ```
 
 ## Przykładowe pytania

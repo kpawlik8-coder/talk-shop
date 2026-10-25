@@ -12,3 +12,21 @@ build/
 .DS_Store
 .env
 *.rtfd/
+
+# Local files and generated output
+local/
+target/
+tmp/
+output/
+out/
+
+# Editor settings
+.idea/
+.vscode/
+
+# Python build files
+wheels/
+*.pyo
+
+# Local environment directory
+.env/

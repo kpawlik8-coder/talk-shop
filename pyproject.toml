@@ -1,10 +1,9 @@
 [project]
 name = "talk-shop"
 version = "0.1.0"
-description = "Add your description here"
+description = "Rule-based shop chatbot answering questions about prices and stock."
 readme = "README.md"
 authors = [
-    { name = "Piotr Gnyś", email = "pgnys@swps.edu.pl" },
     { name = "Kacper Pawlik", email = "kpawlik8@st.swps.edu.pl" }
 ]
 requires-python = ">=3.13"
@@ -19,15 +18,12 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
-  "ruff",
-  "mypy",
-  "pytest",
-  "pytest-cov",
-  "coverage",
-  "pre-commit",
-  "ipython"
-]
-
-nlp = [
-    "lark"
+    "ruff",
+    "mypy",
+    "pytest",
+    "pytest-cov",
+    "coverage",
+    "pre-commit",
+    "ipython",
+    "pylint"
 ]

@@ -9,8 +9,7 @@ from talk_shop.talk_shop import load_parser, main, process_query, products
 
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
-GRAMMAR_PATH = PROJECT_DIR / "grammar.txt"
-
+GRAMMAR_PATH = PROJECT_DIR / "src" / "talk_shop" / "static" / "grammar.txt"
 
 class ShopTests(unittest.TestCase):
     @classmethod
@@ -25,7 +24,7 @@ class ShopTests(unittest.TestCase):
             "do you have any compaq": "Yes, COMPAQ",
             "how many compaq are in stock": "8 units",
             "how many hewlett_packard do you have": "23 units",
-            "how much is jacket": "Unknown product",
+            "how much is jacket": "I could not find that product in our shop.",
             "hello": "could not understand",
             "": "could not understand",
         }

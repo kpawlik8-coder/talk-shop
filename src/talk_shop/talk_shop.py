@@ -10,6 +10,8 @@ from lark.exceptions import LarkError, UnexpectedInput
 
 @dataclass
 class Product:
+    """Store a product's name, price and available quantity."""
+
     name: str
     price: float
     stock: int
@@ -23,64 +25,104 @@ products: dict[str, Product] = {
 
 
 def load_parser(grammar_path: str) -> Lark:
+    """Read the grammar file and create a parser."""
     grammar = Path(grammar_path).read_text(encoding="utf-8")
     parser = Lark(grammar, parser="earley")
     return parser
 
 
+def find_product(question: Tree) -> Product | None:
+    """Find the product mentioned in the question."""
+    for child in question.children:
+        if isinstance(child, Token) and child.type == "ITEM":
+            item = str(child).replace(" ", "_")
+            return products.get(item)
+
+    return None
+
+
+def answer_question(question_type: str, product: Product) -> str:
+    """Prepare an answer about the selected product."""
+    if question_type == "price_question":
+        return f"The {product.name} costs {product.price:.2f}$."
+
+    if question_type == "availability_question":
+        if product.stock > 0:
+            response = f"Yes, {product.name} is in stock."
+        else:
+            response = f"No, {product.name} is out of stock."
+        return response
+
+    if question_type == "quantity_question":
+        return f"There are {product.stock} units of {product.name} in stock."
+
+    return "I cannot answer this question. Please write END to finish."
+
+
 def process_query(query: str, parser: Lark) -> str:
+    """Recognize a question and return a response to the user."""
     try:
-        query = query.strip().lower().rstrip("?!.")
+        query = query.strip().lower().rstrip("?!.").strip()
         tree = parser.parse(query)
-        query_node = tree.children[0]
+        question = tree.children[0]
 
-        if not isinstance(query_node, Tree):
-            return "Unable to process query."
+        if not isinstance(question, Tree):
+            response = (
+                "I could not understand the question.\n"
+                "Try: how much is compaq.\n"
+                "Please write END to finish the conversation."
+            )
+        else:
+            product = find_product(question)
 
-        item = None
-
-        for child in query_node.children:
-            if isinstance(child, Token) and child.type == "ITEM":
-                item = str(child)
-                break
-
-        if item is None:
-            return "Unable to find the product name in the question."
-
-        item = item.replace(" ", "_")
-        product = products.get(item)
-
-        if product is None:
-            return f"Unknown product: {item}."
-
-        if query_node.data == "price_question":
-            return f"The {product.name} costs {product.price:.2f}$."
-
-        if query_node.data == "availability_question":
-            if product.stock > 0:
-                return f"Yes, {product.name} is in stock."
-            return f"No, {product.name} is out of stock."
-
-        if query_node.data == "quantity_question":
-            return f"There are {product.stock} units of {product.name} in stock."
-
-        return "Unsupported question type."
+            if product is None:
+                response = (
+                    "I could not find that product in our shop.\n"
+                    "Try asking about monorail, compaq or hewlett_packard.\n"
+                    "Please write END to finish the conversation."
+                )
+            else:
+                response = answer_question(str(question.data), product)
 
     except UnexpectedInput:
-        return (
-            "I could not understand the question. "
+        response = (
+            "I could not understand the question.\n"
             "Try: how much is compaq, is compaq in stock, "
-            "or how many compaq do you have."
+            "or how many compaq do you have.\n"
+            "Please write END to finish the conversation."
         )
-    except Exception as error:
-        return f"Unable to process the question: {error}"
+    except Exception:
+        response = (
+            "Sorry, I could not answer your question. Please try again.\n"
+            "Please write END to finish the conversation."
+        )
 
+    return response
+
+
+def run_conversation(parser: Lark) -> None:
+    """Ask for questions until the user ends the conversation."""
+    print("Ask about a product's price, availability or quantity.")
+    print("Type END to exit.")
+
+    while True:
+        try:
+            query = input("Query: ")
+        except (EOFError, KeyboardInterrupt):
+            print("\nGoodbye!")
+            return
+
+        if query.strip().upper() == "END":
+            print("Goodbye!")
+            return
+
+        response = process_query(query, parser)
+        print(response)
 
 
 def main() -> None:
-    arguments = argparse.ArgumentParser(
-        description="Ask about product prices and stock."
-    )
+    """Read command-line arguments and start the shop assistant."""
+    arguments = argparse.ArgumentParser(description=__doc__)
     arguments.add_argument(
         "-g",
         "--grammar",
@@ -101,23 +143,8 @@ def main() -> None:
         print(f"Unable to start the program: {error}")
         return
 
-    print("Ask about a product's price, availability or quantity.")
-    print("Type END to exit.")
+    run_conversation(parser)
 
-    while True:
-        try:
-            query = input("Query: ")
-        except (EOFError, KeyboardInterrupt):
-            print("\nGoodbye!")
-            return
-
-        if query.strip().upper() == "END":
-            print("Goodbye!")
-            return
-
-        response = process_query(query, parser)
-        print(response)
-        
 
 if __name__ == "__main__":
     main()
