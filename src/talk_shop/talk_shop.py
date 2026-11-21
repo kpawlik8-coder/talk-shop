@@ -1,48 +1,37 @@
-"""Command-line shop assistant using a grammar supplied by the user."""
+"""Run the shop chatbot or the administrator menu."""
 
 import argparse
-from dataclasses import dataclass
 from pathlib import Path
 
 from lark import Lark, Token, Tree
 from lark.exceptions import LarkError, UnexpectedInput
+from sqlalchemy.engine import Engine
+from sqlalchemy.exc import SQLAlchemyError
 
-
-@dataclass
-class Product:
-    """Store a product's name, price and available quantity."""
-
-    name: str
-    price: float
-    stock: int
-
-
-products: dict[str, Product] = {
-    "monorail": Product(name="Monorail", price=1449.99, stock=30),
-    "hewlett_packard": Product(name="Hewlett Packard", price=1849.99, stock=23),
-    "compaq": Product(name="COMPAQ", price=2399.99, stock=8),
-}
+from talk_shop.core.database import prepare_db
+from talk_shop.core.products import find_product as find_product_in_db
+from talk_shop.models.product import Product
+from talk_shop.services.admin import run_admin
 
 
 def load_parser(grammar_path: str) -> Lark:
     """Read the grammar file and create a parser."""
     grammar = Path(grammar_path).read_text(encoding="utf-8")
-    parser = Lark(grammar, parser="earley")
-    return parser
+    return Lark(grammar, parser="earley")
 
 
-def find_product(question: Tree) -> Product | None:
-    """Find the product mentioned in the question."""
+def find_product(question: Tree, engine: Engine) -> Product | None:
+    """Find the product mentioned in a question."""
     for child in question.children:
         if isinstance(child, Token) and child.type == "ITEM":
-            item = str(child).replace(" ", "_")
-            return products.get(item)
+            name = str(child).replace("_", " ")
+            return find_product_in_db(name, engine)
 
     return None
 
 
 def answer_question(question_type: str, product: Product) -> str:
-    """Prepare an answer about the selected product."""
+    """Prepare an answer about a product."""
     if question_type == "price_question":
         return f"The {product.name} costs {product.price:.2f}$."
 
@@ -59,8 +48,8 @@ def answer_question(question_type: str, product: Product) -> str:
     return "I cannot answer this question. Please write END to finish."
 
 
-def process_query(query: str, parser: Lark) -> str:
-    """Recognize a question and return a response to the user."""
+def process_query(query: str, parser: Lark, engine: Engine) -> str:
+    """Recognize a question and answer using database data."""
     try:
         query = query.strip().lower().rstrip("?!.").strip()
         tree = parser.parse(query)
@@ -73,12 +62,12 @@ def process_query(query: str, parser: Lark) -> str:
                 "Please write END to finish the conversation."
             )
         else:
-            product = find_product(question)
+            product = find_product(question, engine)
 
             if product is None:
                 response = (
                     "I could not find that product in our shop.\n"
-                    "Try asking about monorail, compaq or hewlett_packard.\n"
+                    "Please check the product name and try again.\n"
                     "Please write END to finish the conversation."
                 )
             else:
@@ -91,16 +80,21 @@ def process_query(query: str, parser: Lark) -> str:
             "or how many compaq do you have.\n"
             "Please write END to finish the conversation."
         )
+    except SQLAlchemyError:
+        response = (
+            "Product information is temporarily unavailable.\n"
+            "Please try again or write END to finish."
+        )
     except Exception:
         response = (
-            "Sorry, I could not answer your question. Please try again.\n"
-            "Please write END to finish the conversation."
+            "Sorry, I could not answer your question.\n"
+            "Please try again or write END to finish."
         )
 
     return response
 
 
-def run_conversation(parser: Lark) -> None:
+def run_conversation(parser: Lark, engine: Engine) -> None:
     """Ask for questions until the user ends the conversation."""
     print("Ask about a product's price, availability or quantity.")
     print("Type END to exit.")
@@ -116,34 +110,64 @@ def run_conversation(parser: Lark) -> None:
             print("Goodbye!")
             return
 
-        response = process_query(query, parser)
-        print(response)
+        print(process_query(query, parser, engine))
 
 
-def main() -> None:
-    """Read command-line arguments and start the shop assistant."""
+def read_arguments() -> argparse.Namespace:
+    """Read options and require a grammar only for the chatbot."""
     arguments = argparse.ArgumentParser(description=__doc__)
+    arguments.add_argument(
+        "--admin",
+        action="store_true",
+        help="Open the administrator menu",
+    )
     arguments.add_argument(
         "-g",
         "--grammar",
-        required=True,
-        help="Path to the grammar file",
+        help="Path to the grammar file; required for the chatbot",
     )
     options = arguments.parse_args()
 
-    try:
+    if not options.admin and not options.grammar:
+        arguments.error("the chatbot requires -g or --grammar")
+
+    return options
+
+
+def run_application(options: argparse.Namespace) -> None:
+    """Prepare resources and run the selected application mode."""
+    parser = None
+
+    if not options.admin:
         parser = load_parser(options.grammar)
+
+    engine = prepare_db()
+
+    try:
+        if options.admin:
+            run_admin(engine)
+        elif parser is not None:
+            run_conversation(parser, engine)
+    finally:
+        engine.dispose()
+
+
+def main() -> None:
+    """Start the application and explain startup errors."""
+    options = read_arguments()
+
+    try:
+        run_application(options)
     except (OSError, UnicodeError) as error:
-        print(f"Unable to read the grammar file: {error}")
-        return
+        print(f"Unable to access an application file: {error}")
     except LarkError as error:
         print(f"Invalid grammar: {error}")
-        return
-    except Exception as error:
-        print(f"Unable to start the program: {error}")
-        return
-
-    run_conversation(parser)
+    except SQLAlchemyError:
+        print("Unable to access the database. Please try again.")
+    except (EOFError, KeyboardInterrupt):
+        print("\nGoodbye!")
+    except Exception:
+        print("The application stopped because of an unexpected error.")
 
 
 if __name__ == "__main__":
